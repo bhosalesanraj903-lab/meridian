@@ -14,7 +14,7 @@ Then either re-upload the batch (new event) or start the job directly:
 ```bash
 aws glue start-job-run --job-name meridian-resolve-and-screen --arguments '{
   "--batch_id":"<batch_id>",
-  "--batch_prefix":"s3://meridian-lake-470945861699/bronze/customers/incoming/batch_id=<batch_id>",
+  "--batch_prefix":"s3://meridian-lake-use1-470945861699/bronze/customers/incoming/batch_id=<batch_id>",
   "--trigger_reason":"manual_reprocess"}'
 ```
 

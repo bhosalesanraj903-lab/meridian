@@ -107,7 +107,14 @@ module "chain_customer_batch" {
 }
 
 # aws_s3_bucket_notification is bucket-global: ALL prefix rules live here.
+# S3 validates against the topics' policies at PutBucketNotification time, so
+# the chains (which own those policies) must be fully created first.
 resource "aws_s3_bucket_notification" "lake" {
+  depends_on = [
+    module.chain_sdn_updated,
+    module.chain_customer_batch,
+    module.chain_gold_published,
+  ]
   bucket = module.lake.lake_bucket
 
   topic {

@@ -14,9 +14,12 @@ variable "budget_limit_usd" {
   default = "5.0"
 }
 
+# Region-suffixed names: S3 names are global and a deleted name can take up
+# to an hour to become reusable in another region — suffixing sidesteps that
+# and keeps names unique if we ever run multi-region.
 locals {
-  lake_bucket      = "meridian-lake-${var.account_id}"
-  artifacts_bucket = "meridian-artifacts-${var.account_id}"
+  lake_bucket      = "meridian-lake-use1-${var.account_id}"
+  artifacts_bucket = "meridian-artifacts-use1-${var.account_id}"
 }
 
 # ---------- data lake bucket ----------

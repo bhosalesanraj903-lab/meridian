@@ -18,7 +18,7 @@ against the latest batch (`batch_id=rescan-sdn_<ts>_<hash>`).
 ```bash
 aws glue start-job-run --job-name meridian-resolve-and-screen --arguments '{
   "--batch_id":"manual-rescan-$(date -u +%Y%m%dT%H%M%SZ)",
-  "--batch_prefix":"s3://meridian-lake-470945861699/bronze/customers/incoming/batch_id=<latest>",
+  "--batch_prefix":"s3://meridian-lake-use1-470945861699/bronze/customers/incoming/batch_id=<latest>",
   "--trigger_reason":"manual_rescan"}'
 ```
 
