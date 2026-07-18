@@ -22,6 +22,26 @@ resource "aws_s3_object" "meridian_wheel" {
   etag   = filemd5("${local.build_dir}/${local.wheel_file}")
 }
 
+# INC-001: full vendored wheelhouse (make build-wheelhouse) — the job installs
+# ONLY these prebuilt cp39/manylinux wheels; PyPI never enters the startup path.
+resource "aws_s3_object" "vendor_wheels" {
+  for_each = fileset("${local.build_dir}/wheelhouse", "*.whl")
+  bucket   = module.lake.artifacts_bucket
+  key      = "wheels/vendor/${each.value}"
+  source   = "${local.build_dir}/wheelhouse/${each.value}"
+  etag     = filemd5("${local.build_dir}/wheelhouse/${each.value}")
+}
+
+locals {
+  extra_py_files = join(",", concat(
+    ["s3://${module.lake.artifacts_bucket}/wheels/${local.wheel_file}"],
+    [
+      for w in sort(tolist(fileset("${local.build_dir}/wheelhouse", "*.whl"))) :
+      "s3://${module.lake.artifacts_bucket}/wheels/vendor/${w}"
+    ],
+  ))
+}
+
 # ---------- resolution trigger Lambda ----------
 
 data "aws_iam_policy_document" "resolution_trigger" {
@@ -162,11 +182,11 @@ module "resolve_and_screen_job" {
   timeout_minutes  = 30
 
   default_arguments = {
-    "--extra-py-files" = "s3://${module.lake.artifacts_bucket}/${aws_s3_object.meridian_wheel.key}"
-    # Pinned for the py3.9 Glue Python Shell runtime; splink pin is INC-000.
-    "--additional-python-modules" = "splink==4.0.16,duckdb==1.1.3,pandas==2.2.3,pyarrow==17.0.0,rapidfuzz==3.9.7"
-    "--MERIDIAN_LAKE_URI"         = "s3://${module.lake.lake_bucket}"
-    "--MERIDIAN_STATE_BACKEND"    = "dynamodb"
-    "--MERIDIAN_STATE_TABLE"      = module.lake.state_table_name
+    # meridian wheel + fully vendored dependency wheelhouse (INC-001):
+    # Glue pip-installs these exact S3 wheels, nothing else.
+    "--extra-py-files"         = local.extra_py_files
+    "--MERIDIAN_LAKE_URI"      = "s3://${module.lake.lake_bucket}"
+    "--MERIDIAN_STATE_BACKEND" = "dynamodb"
+    "--MERIDIAN_STATE_TABLE"   = module.lake.state_table_name
   }
 }

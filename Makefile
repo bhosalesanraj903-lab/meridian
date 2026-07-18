@@ -15,6 +15,18 @@ build-wheel:
 	rm -f build/meridian-*.whl
 	.venv/bin/pip wheel --quiet --no-deps -w build .
 
+# Vendor every Glue-job dependency as a prebuilt wheel for the Glue Python
+# Shell platform (cp39/manylinux2014). Installing from these S3 wheels removes
+# PyPI resolution from job startup entirely — see INC-001.
+build-wheelhouse:
+	rm -rf build/wheelhouse && mkdir -p build/wheelhouse
+	.venv/bin/pip download --only-binary=:all: \
+		--platform manylinux2014_x86_64 --python-version 3.9 \
+		--implementation cp --abi cp39 --abi abi3 --abi none \
+		-d build/wheelhouse \
+		"splink==4.0.16" "duckdb==1.1.3" "pandas==2.2.3" "pyarrow==17.0.0" \
+		"rapidfuzz==3.9.7" "igraph==0.11.9" "numpy==1.26.4"
+
 PY := .venv/bin/python
 
 install:
