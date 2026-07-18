@@ -52,3 +52,6 @@ resolve:
 
 screen:
 	$(PY) -m meridian.screening.screen
+
+status:
+	$(PY) tools/status.py

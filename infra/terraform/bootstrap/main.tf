@@ -32,6 +32,18 @@ variable "github_repo" {
   description = "GitHub repo (owner/name) trusted to assume the deploy role"
 }
 
+# GitHub OIDC sub claims embed numeric owner/repo IDs:
+#   repo:<owner>@<owner_id>/<repo>@<repo_id>:<context>
+# Pinning the IDs is stricter than names alone (immune to rename/re-create
+# attacks). Get them from: gh api repos/<owner>/<repo> --jq '.id,.owner.id'
+variable "github_owner_id" {
+  type = string
+}
+
+variable "github_repo_id" {
+  type = string
+}
+
 data "aws_caller_identity" "current" {}
 
 resource "aws_s3_bucket" "tfstate" {
@@ -70,7 +82,7 @@ resource "aws_iam_role" "github_deploy" {
           "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
         }
         StringLike = {
-          "token.actions.githubusercontent.com:sub" = "repo:${var.github_repo}:*"
+          "token.actions.githubusercontent.com:sub" = "repo:${split("/", var.github_repo)[0]}@${var.github_owner_id}/${split("/", var.github_repo)[1]}@${var.github_repo_id}:*"
         }
       }
     }]
