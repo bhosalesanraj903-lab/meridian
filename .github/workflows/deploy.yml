@@ -1,5 +1,6 @@
 name: deploy
 on:
+  workflow_dispatch: # manual runs from the Actions tab
   pull_request:
     paths: ["infra/**", "lambdas/**", "glue_jobs/**", "src/**", "pyproject.toml"]
   push:
@@ -34,7 +35,7 @@ jobs:
       - run: terraform -chdir=$TF_DIR plan -no-color -lock=false -var alert_email="${{ vars.ALERT_EMAIL }}"
 
   apply:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     environment: dev # add a required reviewer in repo settings for a manual gate
     steps:
