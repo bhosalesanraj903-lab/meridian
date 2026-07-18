@@ -1,0 +1,43 @@
+name: deploy
+on:
+  pull_request:
+    paths: ["infra/**"]
+  push:
+    branches: [main]
+    paths: ["infra/**"]
+
+permissions:
+  id-token: write # OIDC — no long-lived AWS keys anywhere
+  contents: read
+  pull-requests: write
+
+env:
+  TF_DIR: infra/terraform/envs/dev
+
+jobs:
+  plan:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ap-south-1
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform -chdir=$TF_DIR init -backend-config="bucket=${{ vars.TFSTATE_BUCKET }}"
+      - run: terraform -chdir=$TF_DIR plan -no-color -var alert_email="${{ vars.ALERT_EMAIL }}"
+
+  apply:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: dev # manual approval gate configured in repo settings
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ap-south-1
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform -chdir=$TF_DIR init -backend-config="bucket=${{ vars.TFSTATE_BUCKET }}"
+      - run: terraform -chdir=$TF_DIR apply -auto-approve -var alert_email="${{ vars.ALERT_EMAIL }}"
