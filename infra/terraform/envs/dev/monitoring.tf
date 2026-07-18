@@ -35,8 +35,20 @@ resource "aws_cloudwatch_dashboard" "ops" {
   dashboard_body = jsonencode({
     widgets = [
       {
+        type = "text"
+        x    = 0, y = 0, width = 24, height = 4
+        properties = {
+          markdown = <<-EOT
+            ## Meridian — sanctions-screening pipeline (us-east-1)
+            **Flow:** EventBridge 6h cron → `ofac-ingest` λ → S3 bronze → SNS→SQS (+DLQ) → `resolution-trigger` λ (validate/quarantine/dedupe) → Glue `resolve-and-screen` (1 DPU) → S3 silver+gold Parquet → SNS→SQS → `gold-notifier` λ → **alert email** · gold queryable in [Athena](https://console.aws.amazon.com/athena/home?region=us-east-1) (workgroup `meridian`)
+
+            **Triage ritual:** alarm strip below must be green → DLQ depths 0 → ingest invocations present every 6h. Anything red: [Glue runs](https://console.aws.amazon.com/gluestudio/home?region=us-east-1#/jobs) → runbooks in [repo](https://github.com/bhosalesanraj903-lab/meridian) `docs/runbooks/`. Budget alarm $5/mo.
+          EOT
+        }
+      },
+      {
         type = "alarm"
-        x    = 0, y = 0, width = 24, height = 3
+        x    = 0, y = 4, width = 24, height = 3
         properties = {
           title  = "Alarm status — anything not green is today's work"
           alarms = local.alarm_arns
@@ -44,7 +56,7 @@ resource "aws_cloudwatch_dashboard" "ops" {
       },
       {
         type = "metric"
-        x    = 0, y = 3, width = 12, height = 6
+        x    = 0, y = 7, width = 12, height = 6
         properties = {
           title  = "Lambda invocations (ingest freshness = leftmost bars present)"
           region = var.region
@@ -59,7 +71,7 @@ resource "aws_cloudwatch_dashboard" "ops" {
       },
       {
         type = "metric"
-        x    = 12, y = 3, width = 12, height = 6
+        x    = 12, y = 7, width = 12, height = 6
         properties = {
           title  = "Lambda errors (must be zero)"
           region = var.region
@@ -74,7 +86,7 @@ resource "aws_cloudwatch_dashboard" "ops" {
       },
       {
         type = "metric"
-        x    = 0, y = 9, width = 12, height = 6
+        x    = 0, y = 13, width = 12, height = 6
         properties = {
           title  = "Queue depth (DLQs must be zero)"
           region = var.region
@@ -89,7 +101,7 @@ resource "aws_cloudwatch_dashboard" "ops" {
       },
       {
         type = "log"
-        x    = 12, y = 9, width = 12, height = 6
+        x    = 12, y = 13, width = 12, height = 6
         properties = {
           title  = "Screening runs — hits by severity (from run summaries)"
           region = var.region
