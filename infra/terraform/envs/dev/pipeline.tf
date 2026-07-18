@@ -113,6 +113,14 @@ resource "aws_s3_bucket_notification" "lake" {
     filter_prefix = "bronze/customers/incoming/"
     filter_suffix = "manifest.json"
   }
+
+  topic {
+    id            = "gold-published"
+    topic_arn     = module.chain_gold_published.topic_arn
+    events        = ["s3:ObjectCreated:*"]
+    filter_prefix = "gold/screening_hits/"
+    filter_suffix = ".parquet"
+  }
 }
 
 # ---------- Glue job ----------
