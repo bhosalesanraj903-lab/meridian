@@ -25,7 +25,7 @@ build-wheelhouse:
 		--implementation cp --abi cp39 --abi abi3 --abi none \
 		-d build/wheelhouse \
 		"splink==4.0.16" "duckdb==1.1.3" "pandas==2.2.3" "pyarrow==17.0.0" \
-		"rapidfuzz==3.9.7" "igraph==0.11.9" "numpy==1.26.4"
+		"rapidfuzz==3.9.7" "igraph==0.11.9" "numpy==1.26.4" "requests==2.32.5"
 
 PY := .venv/bin/python
 

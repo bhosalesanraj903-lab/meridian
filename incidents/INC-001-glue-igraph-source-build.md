@@ -26,16 +26,29 @@ to build igraph's C core. Unpinned transitive dependency + no-toolchain
 runtime = startup failure. Same class of lesson as INC-000: the failure lives
 in dependency resolution, not our code.
 
-## Resolution
-Pin `igraph==0.11.9` (ships a py3.9-compatible manylinux wheel) in the job's
-`--additional-python-modules` (infra/terraform/envs/dev/pipeline.tf). Stopping
-the doomed run also confirmed the Glue FAILED/STOPPED EventBridge rule ->
+## Resolution (three attempts — each taught something)
+1. **Pin igraph==0.11.9 in --additional-python-modules**: run 2 still pulled
+   igraph-1.0.0.tar.gz — job-config change hadn't propagated when the run
+   started (Glue eventual consistency). Lesson: verify `aws glue get-job`
+   shows the new args before rerunning.
+2. **Vendored wheelhouse via --extra-py-files** (make build-wheelhouse: full
+   dependency tree as cp39/manylinux wheels in S3): run 3 STILL built pyarrow
+   and igraph from source. Logs revealed the real mechanism: Glue pip-installs
+   extra-py-files ONE AT A TIME, IN LIST ORDER, resolving any unsatisfied
+   requirement from PyPI. meridian's wheel was first in the list, so pip
+   resolved `pyarrow>=17` -> 21.0 (sdist on py3.9) from PyPI before any
+   vendor wheel installed.
+3. **Ordered wheelhouse**: leaf/compiled wheels first, pandas/altair, then
+   splink, meridian LAST — every requirement is already satisfied locally by
+   the time its dependent installs, so pip never consults PyPI. requests
+   vendored too. This is the durable fix.
+
+Stopping the doomed runs confirmed the Glue STOPPED EventBridge rule ->
 alerts email path fires.
 
 ## Action items
-- [x] Pin igraph==0.11.9 alongside the other job deps
-- [ ] Harden: mirror all job wheels into meridian-artifacts/wheels/ and point
-      --additional-python-modules at s3 paths — removes PyPI resolution from
-      the startup path entirely (also fixes the ~2 min per-run pip cost)
-- [ ] Rule: every dependency in Glue job args must be an exact pin, including
-      transitive deps that have ever resolved to an sdist
+- [x] Vendored, ORDERED wheelhouse in --extra-py-files (PyPI out of the
+      startup path; also removes most of the per-run pip latency)
+- [x] Rule: verify get-job args after terraform apply, before start-job-run
+- [x] Rule: every Glue dependency is an exact pinned wheel in the wheelhouse;
+      rebuild with `make build-wheelhouse` on any dep change

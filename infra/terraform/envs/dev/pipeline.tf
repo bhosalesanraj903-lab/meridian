@@ -32,13 +32,24 @@ resource "aws_s3_object" "vendor_wheels" {
   etag     = filemd5("${local.build_dir}/wheelhouse/${each.value}")
 }
 
+# Glue pip-installs extra-py-files IN LIST ORDER, one at a time, resolving
+# any unsatisfied requirement from PyPI (where pyarrow/igraph resolve to
+# sdists that fail to compile — INC-001). Order is therefore load-bearing:
+# leaf/compiled wheels first, splink after its deps, meridian last so every
+# one of its requirements is already satisfied locally.
 locals {
+  vendor_wheels  = sort(tolist(fileset("${local.build_dir}/wheelhouse", "*.whl")))
+  wheels_leaf    = [for w in local.vendor_wheels : w if !can(regex("^(splink|pandas|altair)", w))]
+  wheels_mid     = [for w in local.vendor_wheels : w if can(regex("^(pandas|altair)", w))]
+  wheels_splink  = [for w in local.vendor_wheels : w if can(regex("^splink", w))]
+  wheels_ordered = concat(local.wheels_leaf, local.wheels_mid, local.wheels_splink)
+
   extra_py_files = join(",", concat(
-    ["s3://${module.lake.artifacts_bucket}/wheels/${local.wheel_file}"],
     [
-      for w in sort(tolist(fileset("${local.build_dir}/wheelhouse", "*.whl"))) :
+      for w in local.wheels_ordered :
       "s3://${module.lake.artifacts_bucket}/wheels/vendor/${w}"
     ],
+    ["s3://${module.lake.artifacts_bucket}/wheels/${local.wheel_file}"],
   ))
 }
 
