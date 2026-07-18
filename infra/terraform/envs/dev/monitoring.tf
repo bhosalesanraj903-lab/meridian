@@ -1,5 +1,33 @@
 # M5 — meridian-ops dashboard: the daily-triage landing page.
-# Ritual: alarms strip first; anything red -> function/queue panels -> logs.
+# Ritual: flow map + alarms strip first; anything red -> panels -> logs.
+
+# Custom-widget Lambda: renders the live pipeline flow diagram inside the
+# dashboard (CloudWatch invokes it with the viewer's credentials on refresh).
+data "aws_iam_policy_document" "flow_widget" {
+  statement {
+    sid = "ReadPipelineState"
+    actions = [
+      "cloudwatch:DescribeAlarms",
+      "glue:GetJobRuns",
+      "logs:DescribeLogStreams",
+      "sqs:GetQueueUrl",
+      "sqs:GetQueueAttributes",
+      "sns:ListSubscriptionsByTopic",
+    ]
+    resources = ["*"]
+  }
+}
+
+module "flow_widget_lambda" {
+  source           = "../../modules/lambda_zip"
+  name             = "meridian-flow-widget"
+  zip_path         = "${path.module}/../../../../build/lambda_bundle.zip"
+  handler          = "flow_widget_handler.lambda_handler"
+  policy_json      = data.aws_iam_policy_document.flow_widget.json
+  alerts_topic_arn = module.lake.alerts_topic_arn
+  timeout          = 30
+  memory_mb        = 128
+}
 
 locals {
   alarm_names = [
@@ -35,8 +63,17 @@ resource "aws_cloudwatch_dashboard" "ops" {
   dashboard_body = jsonencode({
     widgets = [
       {
-        type = "text"
+        type = "custom"
         x    = 0, y = 0, width = 24, height = 4
+        properties = {
+          endpoint = module.flow_widget_lambda.function_arn
+          title    = "Pipeline flow — live component status"
+          updateOn = { refresh = true, resize = true, timeRange = false }
+        }
+      },
+      {
+        type = "text"
+        x    = 0, y = 4, width = 24, height = 4
         properties = {
           markdown = <<-EOT
             ## Meridian — sanctions-screening pipeline (us-east-1)
@@ -48,7 +85,7 @@ resource "aws_cloudwatch_dashboard" "ops" {
       },
       {
         type = "alarm"
-        x    = 0, y = 4, width = 24, height = 3
+        x    = 0, y = 8, width = 24, height = 3
         properties = {
           title  = "Alarm status — anything not green is today's work"
           alarms = local.alarm_arns
@@ -56,7 +93,7 @@ resource "aws_cloudwatch_dashboard" "ops" {
       },
       {
         type = "metric"
-        x    = 0, y = 7, width = 12, height = 6
+        x    = 0, y = 11, width = 12, height = 6
         properties = {
           title  = "Lambda invocations (ingest freshness = leftmost bars present)"
           region = var.region
@@ -71,7 +108,7 @@ resource "aws_cloudwatch_dashboard" "ops" {
       },
       {
         type = "metric"
-        x    = 12, y = 7, width = 12, height = 6
+        x    = 12, y = 11, width = 12, height = 6
         properties = {
           title  = "Lambda errors (must be zero)"
           region = var.region
@@ -86,7 +123,7 @@ resource "aws_cloudwatch_dashboard" "ops" {
       },
       {
         type = "metric"
-        x    = 0, y = 13, width = 12, height = 6
+        x    = 0, y = 17, width = 12, height = 6
         properties = {
           title  = "Queue depth (DLQs must be zero)"
           region = var.region
@@ -101,7 +138,7 @@ resource "aws_cloudwatch_dashboard" "ops" {
       },
       {
         type = "log"
-        x    = 12, y = 13, width = 12, height = 6
+        x    = 12, y = 17, width = 12, height = 6
         properties = {
           title  = "Screening runs — hits by severity (from run summaries)"
           region = var.region

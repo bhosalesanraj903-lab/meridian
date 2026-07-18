@@ -9,6 +9,7 @@ build-lambdas:
 	cp lambdas/ofac_ingest/handler.py build/lambda_pkg/ofac_ingest_handler.py
 	cp lambdas/resolution_trigger/handler.py build/lambda_pkg/resolution_trigger_handler.py
 	cp lambdas/gold_notifier/handler.py build/lambda_pkg/gold_notifier_handler.py
+	cp lambdas/flow_widget/handler.py build/lambda_pkg/flow_widget_handler.py
 	cd build/lambda_pkg && zip -qr ../lambda_bundle.zip . -x "*.pyc" -x "*__pycache__*"
 
 build-wheel:
