@@ -21,6 +21,14 @@ Method:
      POSSIBLE — name-only screening floods analysts with same-name/different-
      person hits, and DOB is the cheapest discriminator we hold on both sides.
      Hits are never dropped by DOB (list DOBs can be wrong/aliases).
+  6. DOB promotion (audit finding, 2026-07-18): a near-miss name score
+     (>= 0.90) WITH a corroborating DOB is stronger evidence than a perfect
+     name with no DOB — promote to STRONG. `severity_basis` records whether
+     severity came from the name score alone or a DOB promotion/demotion.
+  7. Fan-out cap (audit finding, 2026-07-18): a customer whose name matches
+     hundreds of SDN entries ("khan" problem) carries little signal per
+     match. Keep only the top FANOUT_CAP matches per customer by score;
+     `cluster_match_count` preserves the original fan-out for analysts.
 
 The OFAC sdn.csv has no header row. Columns (per OFAC file spec):
   ent_num, sdn_name, sdn_type, program, title, call_sign, vess_type,
@@ -51,6 +59,10 @@ SDN_COLUMNS = [
 
 STRONG_THRESHOLD = 0.95
 POSSIBLE_THRESHOLD = 0.88
+# Near-miss name score that a corroborating DOB promotes to STRONG.
+PROMOTE_THRESHOLD = 0.90
+# Max SDN matches kept per customer cluster (top-N by score).
+FANOUT_CAP = 25
 
 
 def normalize_name(name: str) -> str:
@@ -224,16 +236,40 @@ def screen(
 
     hits["severity"] = "POSSIBLE"
     hits.loc[hits["score"] >= STRONG_THRESHOLD, "severity"] = "STRONG"
+    hits["severity_basis"] = "name_score"
     hits["dob_corroboration"] = [
         dob_corroboration(
             dob, [int(y) for y in years.split(",") if y]
         )
         for dob, years in zip(hits["dob"].fillna(""), hits["sdn_dob_years"])
     ]
-    hits.loc[
-        (hits["severity"] == "STRONG") & (hits["dob_corroboration"] == "mismatch"),
-        "severity",
-    ] = "POSSIBLE"
+    demote = (hits["severity"] == "STRONG") & (hits["dob_corroboration"] == "mismatch")
+    hits.loc[demote, ["severity", "severity_basis"]] = ["POSSIBLE", "dob_demoted"]
+    promote = (
+        (hits["severity"] == "POSSIBLE")
+        & (hits["score"] >= PROMOTE_THRESHOLD)
+        & (hits["dob_corroboration"] == "match")
+    )
+    hits.loc[promote, ["severity", "severity_basis"]] = ["STRONG", "dob_promoted"]
+
+    # Fan-out cap: common names ("khan") match hundreds of SDN entries with
+    # little signal each. Keep the top FANOUT_CAP per customer by score
+    # (deterministic tie-break on ent_num); record the original fan-out.
+    hits["cluster_match_count"] = (
+        hits.groupby("cluster_id")["ent_num"].transform("size").astype("int64")
+    )
+    n_before = len(hits)
+    hits = (
+        hits.sort_values(
+            ["cluster_id", "score", "ent_num"], ascending=[True, False, True]
+        )
+        .groupby("cluster_id", group_keys=False)
+        .head(FANOUT_CAP)
+        .sort_values("score", ascending=False)
+        .reset_index(drop=True)
+    )
+    n_capped = n_before - len(hits)
+
     hits.insert(0, "hit_id", [uuid.uuid4().hex for _ in range(len(hits))])
     hits.insert(1, "run_id", run_id)
     hits.insert(2, "batch_id", batch_id)
@@ -256,6 +292,9 @@ def screen(
         "hits_total": int(len(hits)),
         "hits_strong": int((hits["severity"] == "STRONG").sum()),
         "hits_possible": int((hits["severity"] == "POSSIBLE").sum()),
+        "hits_promoted": int((hits["severity_basis"] == "dob_promoted").sum()),
+        "hits_demoted": int((hits["severity_basis"] == "dob_demoted").sum()),
+        "hits_capped": int(n_capped),
         "hits_uri": out_uri,
     }
     log.info("Screening complete", extra=summary)

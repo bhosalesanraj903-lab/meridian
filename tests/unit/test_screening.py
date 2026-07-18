@@ -136,6 +136,43 @@ def test_dob_match_keeps_strong_hit(settings):
     assert (bout["dob_corroboration"] == "match").all()
 
 
+def test_dob_match_promotes_near_miss(settings, monkeypatch):
+    _land_sdn(settings)
+    # truncated first name scores ~0.94 vs "bout viktor anatolijevitch" —
+    # below STRONG on name alone, but the matching DOB promotes it.
+    clusters = _clusters([["c1", "CRM-1", "vik", "bout", "1967-01-13"]])
+    summary = screen(settings, clusters=clusters, run_id="promote")
+    hits = pd.read_parquet(io.BytesIO(storage.read_bytes(summary["hits_uri"])))
+    bout = hits[hits["cluster_id"] == "c1"]
+    assert len(bout) == 1
+    assert 0.90 <= bout.iloc[0]["score"] < 0.95, bout.to_string()
+    assert bout.iloc[0]["severity"] == "STRONG"
+    assert bout.iloc[0]["severity_basis"] == "dob_promoted"
+    assert summary["hits_promoted"] == 1
+
+
+def test_fanout_cap_keeps_top_matches(settings, monkeypatch):
+    from meridian.screening import screen as screen_mod
+
+    monkeypatch.setattr(screen_mod, "FANOUT_CAP", 2)
+    # SDN fixture with 4 same-surname individuals; customer matches all 4.
+    rows = "\n".join(
+        _sdn_row(9000 + i, f"KHAN, {first}", "individual", "SDNTK")
+        for i, first in enumerate(["Karim", "Karime", "Karin", "Kareem"])
+    )
+    storage.write_bytes(
+        f"{settings.bronze_ofac_prefix}/sdn_20260718T000000Z_cap.csv", rows.encode()
+    )
+    clusters = _clusters([["c1", "CRM-1", "karim", "khan", None]])
+    summary = screen_mod.screen(settings, clusters=clusters, run_id="cap")
+    hits = pd.read_parquet(io.BytesIO(storage.read_bytes(summary["hits_uri"])))
+    assert len(hits) == 2, hits.to_string()
+    assert (hits["cluster_match_count"] == 4).all()
+    assert summary["hits_capped"] == 2
+    # the exact-name match must survive the cap
+    assert "KHAN, Karim" in set(hits["sdn_name"])
+
+
 def test_screen_no_sdn_files_raises(settings):
     try:
         screen(settings, clusters=_clusters([["c1", "CRM-1", "a", "b", None]]))

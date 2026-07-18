@@ -62,7 +62,9 @@ locals {
     { name = "sdn_dob_years", type = "string" },
     { name = "score", type = "double" },
     { name = "severity", type = "string" },
+    { name = "severity_basis", type = "string" },
     { name = "dob_corroboration", type = "string" },
+    { name = "cluster_match_count", type = "bigint" },
     { name = "screened_at", type = "string" },
   ]
 }
