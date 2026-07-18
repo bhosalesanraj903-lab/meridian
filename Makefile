@@ -1,25 +1,27 @@
-.PHONY: up down ps logs test lint gen ingest
+.PHONY: install test test-all lint gen ingest resolve screen
 
-up:
-	docker compose up -d
+PY := .venv/bin/python
 
-down:
-	docker compose down
-
-ps:
-	docker compose ps
-
-logs:
-	docker compose logs -f --tail=100
+install:
+	python3 -m venv .venv && .venv/bin/pip install -e ".[dev,aws]"
 
 test:
-	pytest -q tests/
+	$(PY) -m pytest -q -m "not slow" tests/
+
+test-all:
+	$(PY) -m pytest -q tests/
 
 lint:
-	ruff check .
+	.venv/bin/ruff check .
 
 gen:
-	python generator/generate_customers.py --count 5000 --seed 42
+	$(PY) -m meridian.generator.customers --count 5000 --seed 42
 
 ingest:
-	python ingestion/ofac/ofac_ingest.py
+	$(PY) -m meridian.ingestion.ofac
+
+resolve:
+	$(PY) -m meridian.matching.resolver
+
+screen:
+	$(PY) -m meridian.screening.screen

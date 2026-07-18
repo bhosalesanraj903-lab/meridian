@@ -15,7 +15,7 @@ Outputs (CSV) under data/bronze/customers/:
   _truth.csv               — customer_id -> record ids across systems
 
 Usage:
-  python generator/generate_customers.py --count 5000 --seed 42
+  python -m meridian.generator.customers --count 5000 --seed 42
 """
 from __future__ import annotations
 
@@ -23,6 +23,17 @@ import argparse
 import csv
 import random
 from pathlib import Path
+
+# Identities that overlap the OFAC screening fixtures. `--plant-sdn-hits N`
+# renames the first N generated people to these, giving game-days and tests a
+# known set of STRONG screening hits to assert on. Planting happens after the
+# population is built and consumes no randomness, so a given seed stays
+# byte-identical for the unplanted remainder.
+PLANTED_SDN_IDENTITIES = [
+    ("Viktor", "Bout"),
+    ("Ismael", "Zambada Garcia"),
+    ("Joaquin", "Guzman Loera"),
+]
 
 FIRST_NAMES = [
     "James", "Mary", "John", "Patricia", "Robert", "Jennifer", "Michael",
@@ -158,10 +169,15 @@ def _legacy_row(rng: random.Random, p: dict, rid: int) -> dict:
     }
 
 
-def generate(count: int, seed: int, out_dir: Path) -> dict:
+def generate(count: int, seed: int, out_dir: Path, plant_sdn_hits: int = 0) -> dict:
     rng = random.Random(seed)
     out_dir.mkdir(parents=True, exist_ok=True)
     base = _make_base(rng, count)
+
+    for i in range(min(plant_sdn_hits, len(PLANTED_SDN_IDENTITIES), count)):
+        first, last = PLANTED_SDN_IDENTITIES[i]
+        base[i]["first"] = first
+        base[i]["last"] = last
 
     crm_rows, loan_rows, legacy_rows, truth = [], [], [], []
     for idx, p in enumerate(base):
@@ -212,5 +228,11 @@ if __name__ == "__main__":
     ap.add_argument("--count", type=int, default=5000)
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--out", type=Path, default=Path("data/bronze/customers"))
+    ap.add_argument(
+        "--plant-sdn-hits",
+        type=int,
+        default=0,
+        help="rename the first N people to known SDN identities (game-days)",
+    )
     args = ap.parse_args()
-    print(generate(args.count, args.seed, args.out))
+    print(generate(args.count, args.seed, args.out, plant_sdn_hits=args.plant_sdn_hits))

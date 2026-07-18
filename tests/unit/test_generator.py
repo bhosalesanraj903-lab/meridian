@@ -1,9 +1,7 @@
 """Generator determinism + pathology presence checks."""
 import csv
-from pathlib import Path
-import sys
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from generator.generate_customers import generate
+
+from meridian.generator.customers import PLANTED_SDN_IDENTITIES, generate
 
 
 def test_deterministic(tmp_path):
@@ -28,3 +26,12 @@ def test_truth_mapping_written(tmp_path):
     generate(300, seed=1, out_dir=tmp_path)
     truth = list(csv.DictReader((tmp_path / "_truth.csv").open()))
     assert len(truth) == 300
+
+
+def test_planted_sdn_hits(tmp_path):
+    generate(200, seed=3, out_dir=tmp_path, plant_sdn_hits=2)
+    crm = list(csv.DictReader((tmp_path / "crm_customers.csv").open()))
+    names = " | ".join(r["full_name"].lower() for r in crm)
+    planted = [f"{f} {last}".lower() for f, last in PLANTED_SDN_IDENTITIES[:2]]
+    # ~90% CRM coverage per person; with 2 plants at least one should surface
+    assert any(p in names for p in planted), names[:500]

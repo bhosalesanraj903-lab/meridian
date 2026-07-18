@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "meridian"
+version = "0.1.0"
+description = "Meridian — event-driven sanctions-screening data platform (OFAC + entity resolution)"
+requires-python = ">=3.12"
+dependencies = [
+    "requests>=2.31",
+    # Pinned: INC-000 (salting crash on 1-vCPU). Re-test the incident on any upgrade.
+    "splink==4.0.16",
+    "duckdb>=1.0",
+    "pandas>=2.0",
+    "pyarrow>=17",
+    "rapidfuzz>=3.0",
+]
+
+[project.optional-dependencies]
+aws = ["boto3>=1.34"]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.4",
+    "moto[s3,dynamodb]>=5.0",
+    "boto3>=1.34",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "slow: long-running end-to-end tests (Splink EM training); excluded from PR CI, run weekly",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+extend-exclude = [".venv", "build"]

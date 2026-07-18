@@ -5,8 +5,8 @@ corruption profile), normalizes them to a common schema, runs Splink
 (link_and_dedupe, DuckDB backend) to cluster records belonging to the same
 real person, and writes:
 
-  data/silver/customers/golden_records.csv   cluster_id -> member records
-  data/silver/customers/eval_report.json     pairwise precision/recall vs truth
+  <lake>/silver/customers/golden_records.csv   cluster_id -> member records
+  <lake>/silver/customers/eval_report.json     pairwise precision/recall vs truth
 
 Design notes (these are interview answers — keep them true):
   * Normalization is deliberately separate from matching: fix formats
@@ -23,14 +23,17 @@ Design notes (these are interview answers — keep them true):
 """
 from __future__ import annotations
 
+import io
 import json
 import re
 from itertools import combinations
-from pathlib import Path
 
 import pandas as pd
-from splink import DuckDBAPI, Linker, SettingsCreator, block_on
 import splink.comparison_library as cl
+from splink import DuckDBAPI, Linker, SettingsCreator, block_on
+
+from meridian.config import Settings
+from meridian.io import storage
 
 # Reverse nickname map: nickname -> canonical
 NICK_TO_CANONICAL = {
@@ -39,10 +42,6 @@ NICK_TO_CANONICAL = {
     "tom": "thomas", "chuck": "charles", "chris": "christopher",
     "dan": "daniel", "matt": "matthew", "peggy": "margaret", "jen": "jennifer",
 }
-
-DATA_DIR = Path("data")
-RAW_DIR = DATA_DIR / "bronze" / "customers"
-OUT_DIR = DATA_DIR / "silver" / "customers"
 
 
 def _canon_first(name: str) -> str:
@@ -68,11 +67,15 @@ def _norm_street(s: str) -> str:
     return " ".join(tokens)
 
 
-def load_and_normalize() -> dict[str, pd.DataFrame]:
+def _read_csv(uri: str) -> pd.DataFrame:
+    return pd.read_csv(io.BytesIO(storage.read_bytes(uri)), dtype=str).fillna("")
+
+
+def load_and_normalize(raw_prefix: str) -> dict[str, pd.DataFrame]:
     """Return {alias: normalized frame} with the common matching schema."""
     frames: dict[str, pd.DataFrame] = {}
 
-    crm = pd.read_csv(RAW_DIR / "crm_customers.csv", dtype=str).fillna("")
+    crm = _read_csv(f"{raw_prefix}/crm_customers.csv")
     parts = crm["full_name"].str.strip().str.split(" ", n=1, expand=True)
     frames["crm"] = pd.DataFrame(
         {
@@ -86,7 +89,7 @@ def load_and_normalize() -> dict[str, pd.DataFrame]:
         }
     )
 
-    loans = pd.read_csv(RAW_DIR / "loans_customers.csv", dtype=str).fillna("")
+    loans = _read_csv(f"{raw_prefix}/loans_customers.csv")
     nm = loans["name"].str.split(",", n=1, expand=True)
     dob_iso = pd.to_datetime(
         loans["date_of_birth"], format="%m/%d/%Y", errors="coerce"
@@ -103,7 +106,7 @@ def load_and_normalize() -> dict[str, pd.DataFrame]:
         }
     )
 
-    legacy = pd.read_csv(RAW_DIR / "legacy_customers.csv", dtype=str).fillna("")
+    legacy = _read_csv(f"{raw_prefix}/legacy_customers.csv")
     dob = legacy["birth_dt"].replace("1900-01-01", "")  # sentinel -> missing
     frames["legacy"] = pd.DataFrame(
         {
@@ -117,8 +120,8 @@ def load_and_normalize() -> dict[str, pd.DataFrame]:
         }
     )
 
-    for df in frames.values():
-        df.replace("", None, inplace=True)
+    for alias, df in frames.items():
+        frames[alias] = df.replace("", None)
     return frames
 
 
@@ -156,9 +159,11 @@ def train(linker: Linker) -> None:
     linker.training.estimate_probability_two_random_records_match(
         deterministic, recall=0.7
     )
-    # splink 4.0.16 sets salting_partitions = cpu_count() when max_pairs>1e4
-    # on duckdb; on a single-CPU machine that yields 1 partition and raises
-    # "Salting partitions must be > 1". Fall back below the salting threshold.
+    # INC-000: splink 4.0.16 sets salting_partitions = cpu_count() when
+    # max_pairs>1e4 on duckdb; on a single-CPU machine that yields 1 partition
+    # and raises "Salting partitions must be > 1". Fall back below the salting
+    # threshold. Production Glue runs at 1 DPU (4 vCPU) never hit this; CI
+    # runners and small VMs do.
     try:
         linker.training.estimate_u_using_random_sampling(max_pairs=5e5)
     except ValueError as err:
@@ -173,8 +178,13 @@ def train(linker: Linker) -> None:
     )
 
 
-def resolve(threshold: float = 0.95) -> dict:
-    frames = load_and_normalize()
+def resolve(
+    settings: Settings | None = None, threshold: float = 0.95
+) -> tuple[pd.DataFrame, dict]:
+    """Run resolution; write silver outputs; return (clusters, eval_report)."""
+    settings = settings or Settings.from_env()
+    raw_prefix = f"{settings.lake_uri}/bronze/customers"
+    frames = load_and_normalize(raw_prefix)
     linker = build_linker(frames)
     train(linker)
     predictions = linker.inference.predict(threshold_match_probability=0.5)
@@ -182,20 +192,24 @@ def resolve(threshold: float = 0.95) -> dict:
         predictions, threshold_match_probability=threshold
     ).as_pandas_dataframe()
 
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
-    clusters.to_csv(OUT_DIR / "golden_records.csv", index=False)
-
-    report = evaluate(clusters)
+    report = evaluate(clusters, raw_prefix)
     report["threshold"] = threshold
     report["n_clusters"] = int(clusters["cluster_id"].nunique())
     report["n_records"] = int(len(clusters))
-    (OUT_DIR / "eval_report.json").write_text(json.dumps(report, indent=2))
-    return report
+
+    out_prefix = settings.silver_customers_prefix
+    storage.write_bytes(
+        f"{out_prefix}/golden_records.csv", clusters.to_csv(index=False).encode()
+    )
+    storage.write_bytes(
+        f"{out_prefix}/eval_report.json", json.dumps(report, indent=2).encode()
+    )
+    return clusters, report
 
 
-def evaluate(clusters: pd.DataFrame) -> dict:
+def evaluate(clusters: pd.DataFrame, raw_prefix: str) -> dict:
     """Pairwise precision/recall against generator ground truth."""
-    truth = pd.read_csv(RAW_DIR / "_truth.csv", dtype=str).fillna("")
+    truth = _read_csv(f"{raw_prefix}/_truth.csv")
 
     true_pairs: set[frozenset] = set()
     for _, row in truth.iterrows():
@@ -236,4 +250,8 @@ def evaluate(clusters: pd.DataFrame) -> dict:
 
 
 if __name__ == "__main__":
-    print(json.dumps(resolve(), indent=2))
+    from meridian.logs import setup_logging
+
+    setup_logging()
+    _, _report = resolve()
+    print(json.dumps(_report, indent=2))

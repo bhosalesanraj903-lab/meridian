@@ -1,6 +1,0 @@
-requests>=2.31
-pytest>=8.0
-splink==4.0.16
-duckdb>=1.0
-pandas>=2.0
-ruff>=0.4
