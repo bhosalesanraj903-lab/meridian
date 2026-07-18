@@ -59,9 +59,12 @@ def main() -> None:
     runs = glue.get_job_runs(JobName=GLUE_JOB, MaxResults=1)["JobRuns"]
     if runs:
         run = runs[0]
-        good = run["JobRunState"] == "SUCCEEDED"
+        state = run["JobRunState"]
+        # An in-flight run is healthy, not an incident.
+        good = state in ("SUCCEEDED", "RUNNING", "STARTING", "WAITING")
         ok = ok and good
-        print(f"{'✓' if good else '✗'} screening: last run {run['JobRunState']} "
+        mark = "•" if state in ("RUNNING", "STARTING", "WAITING") else ("✓" if good else "✗")
+        print(f"{mark} screening: last run {state} "
               f"({_age(run['StartedOn'])}, "
               f"batch {run.get('Arguments', {}).get('--batch_id', '?')})")
     else:
