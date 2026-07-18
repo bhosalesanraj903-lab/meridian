@@ -27,7 +27,7 @@ class Settings:
             lake_uri=os.environ.get("MERIDIAN_LAKE_URI", "./data").rstrip("/"),
             user_agent=os.environ.get(
                 "MERIDIAN_USER_AGENT",
-                "MeridianDataPlatform sanrajsb111@gmail.com",
+                "MeridianDataPlatform bhosalesanraj903@gmail.com",
             ),
             state_backend=os.environ.get("MERIDIAN_STATE_BACKEND", "local"),
             state_table=os.environ.get("MERIDIAN_STATE_TABLE", "meridian-state"),
