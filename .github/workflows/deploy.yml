@@ -1,10 +1,10 @@
 name: deploy
 on:
   pull_request:
-    paths: ["infra/**"]
+    paths: ["infra/**", "lambdas/**", "glue_jobs/**", "src/**", "pyproject.toml"]
   push:
     branches: [main]
-    paths: ["infra/**"]
+    paths: ["infra/**", "lambdas/**", "glue_jobs/**", "src/**", "pyproject.toml"]
 
 permissions:
   id-token: write # OIDC — no long-lived AWS keys anywhere
@@ -20,20 +20,28 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      # Terraform hashes these artifacts (lambda zip, wheels), so they must
+      # exist and be reproducible before plan/apply.
+      - run: python -m venv .venv && make build-lambdas build-wheel build-wheelhouse
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: us-east-1
       - uses: hashicorp/setup-terraform@v3
       - run: terraform -chdir=$TF_DIR init -backend-config="bucket=${{ vars.TFSTATE_BUCKET }}"
-      - run: terraform -chdir=$TF_DIR plan -no-color -var alert_email="${{ vars.ALERT_EMAIL }}"
+      - run: terraform -chdir=$TF_DIR plan -no-color -lock=false -var alert_email="${{ vars.ALERT_EMAIL }}"
 
   apply:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
-    environment: dev # manual approval gate configured in repo settings
+    environment: dev # add a required reviewer in repo settings for a manual gate
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: python -m venv .venv && make build-lambdas build-wheel build-wheelhouse
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
