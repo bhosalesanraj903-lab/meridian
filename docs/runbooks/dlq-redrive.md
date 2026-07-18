@@ -21,7 +21,7 @@ IAM change, malformed S3 event from a manual console upload.
 ## 3. Redrive back to the source queue
 ```bash
 aws sqs start-message-move-task \
-  --source-arn arn:aws:sqs:ap-south-1:470945861699:meridian-<chain>-dlq
+  --source-arn arn:aws:sqs:us-east-1:470945861699:meridian-<chain>-dlq
 ```
 Watch the consumer process it, confirm DLQ depth returns to 0 and the alarm
 goes OK (email arrives).

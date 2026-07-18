@@ -21,6 +21,8 @@ provider "aws" {
 }
 
 variable "region" {
+  # Bootstrap stays in ap-south-1: the tfstate bucket was created there and
+  # IAM/OIDC resources are global. Workload resources deploy to us-east-1.
   type    = string
   default = "ap-south-1"
 }

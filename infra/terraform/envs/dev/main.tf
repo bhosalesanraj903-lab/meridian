@@ -10,7 +10,9 @@ terraform {
   backend "s3" {
     # bucket comes from -backend-config (bootstrap output), e.g.:
     #   terraform init -backend-config="bucket=meridian-tfstate-<account_id>"
-    key          = "envs/dev/terraform.tfstate"
+    key = "envs/dev/terraform.tfstate"
+    # The tfstate BUCKET lives in ap-south-1 (original bootstrap region);
+    # state-bucket region is independent of where resources deploy.
     region       = "ap-south-1"
     use_lockfile = true
   }
@@ -25,7 +27,7 @@ provider "aws" {
 
 variable "region" {
   type    = string
-  default = "ap-south-1"
+  default = "us-east-1"
 }
 
 variable "alert_email" {

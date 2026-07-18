@@ -31,7 +31,7 @@ class Settings:
             ),
             state_backend=os.environ.get("MERIDIAN_STATE_BACKEND", "local"),
             state_table=os.environ.get("MERIDIAN_STATE_TABLE", "meridian-state"),
-            aws_region=os.environ.get("AWS_REGION", "ap-south-1"),
+            aws_region=os.environ.get("AWS_REGION", "us-east-1"),
             alerts_topic_arn=os.environ.get("MERIDIAN_ALERTS_TOPIC_ARN", ""),
         )
 

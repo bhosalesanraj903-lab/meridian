@@ -1,6 +1,6 @@
 # Operating handbook
 
-Console entry points (region ap-south-1):
+Console entry points (region us-east-1):
 - Dashboard: CloudWatch -> Dashboards -> `meridian-ops`
 - Runs: Glue -> Jobs -> `meridian-resolve-and-screen` -> Runs
 - Alerts arrive by email (SNS `meridian-alerts`); budget mails at $2.50/$4/$5
