@@ -21,8 +21,8 @@ data "aws_iam_policy_document" "ofac_ingest" {
 module "ofac_ingest_lambda" {
   source           = "../../modules/lambda_zip"
   name             = "meridian-ofac-ingest"
-  zip_path         = "${path.module}/../../../../build/ofac_ingest.zip"
-  handler          = "handler.lambda_handler"
+  zip_path         = "${path.module}/../../../../build/lambda_bundle.zip"
+  handler          = "ofac_ingest_handler.lambda_handler"
   policy_json      = data.aws_iam_policy_document.ofac_ingest.json
   alerts_topic_arn = module.lake.alerts_topic_arn
   timeout          = 120

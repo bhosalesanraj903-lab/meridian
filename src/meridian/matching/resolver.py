@@ -179,11 +179,13 @@ def train(linker: Linker) -> None:
 
 
 def resolve(
-    settings: Settings | None = None, threshold: float = 0.95
+    settings: Settings | None = None,
+    threshold: float = 0.95,
+    raw_prefix: str | None = None,
 ) -> tuple[pd.DataFrame, dict]:
     """Run resolution; write silver outputs; return (clusters, eval_report)."""
     settings = settings or Settings.from_env()
-    raw_prefix = f"{settings.lake_uri}/bronze/customers"
+    raw_prefix = raw_prefix or f"{settings.lake_uri}/bronze/customers"
     frames = load_and_normalize(raw_prefix)
     linker = build_linker(frames)
     train(linker)
@@ -192,7 +194,12 @@ def resolve(
         predictions, threshold_match_probability=threshold
     ).as_pandas_dataframe()
 
-    report = evaluate(clusters, raw_prefix)
+    # Ground truth only exists for generator batches; real feeds skip the gate.
+    if storage.exists(f"{raw_prefix}/_truth.csv"):
+        report = evaluate(clusters, raw_prefix)
+        report["evaluated"] = True
+    else:
+        report = {"evaluated": False}
     report["threshold"] = threshold
     report["n_clusters"] = int(clusters["cluster_id"].nunique())
     report["n_records"] = int(len(clusters))

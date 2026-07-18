@@ -122,6 +122,31 @@ resource "aws_sns_topic" "alerts" {
   name = "meridian-alerts"
 }
 
+# EventBridge (Glue job failure rule) must be allowed to publish alerts.
+resource "aws_sns_topic_policy" "alerts" {
+  arn = aws_sns_topic.alerts.arn
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "AccountOwnerFullAccess"
+        Effect    = "Allow"
+        Principal = { AWS = "*" }
+        Action    = ["SNS:Publish", "SNS:Subscribe", "SNS:GetTopicAttributes"]
+        Resource  = aws_sns_topic.alerts.arn
+        Condition = { StringEquals = { "AWS:SourceOwner" = var.account_id } }
+      },
+      {
+        Sid       = "EventBridgePublish"
+        Effect    = "Allow"
+        Principal = { Service = "events.amazonaws.com" }
+        Action    = "SNS:Publish"
+        Resource  = aws_sns_topic.alerts.arn
+      }
+    ]
+  })
+}
+
 resource "aws_sns_topic_subscription" "alerts_email" {
   topic_arn = aws_sns_topic.alerts.arn
   protocol  = "email"

@@ -6,7 +6,8 @@ build-backend = "setuptools.build_meta"
 name = "meridian"
 version = "0.1.0"
 description = "Meridian — event-driven sanctions-screening data platform (OFAC + entity resolution)"
-requires-python = ">=3.12"
+# 3.9 floor: Glue Python Shell (the resolution/screening runtime) is py3.9.
+requires-python = ">=3.9"
 dependencies = [
     "requests>=2.31",
     # Pinned: INC-000 (salting crash on 1-vCPU). Re-test the incident on any upgrade.
@@ -37,5 +38,5 @@ markers = [
 
 [tool.ruff]
 line-length = 88
-target-version = "py312"
+target-version = "py39"
 extend-exclude = [".venv", "build"]
