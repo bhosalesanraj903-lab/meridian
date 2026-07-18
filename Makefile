@@ -1,4 +1,11 @@
-.PHONY: install test test-all lint gen ingest resolve screen
+.PHONY: install test test-all lint gen ingest resolve screen build-lambdas
+
+build-lambdas:
+	rm -rf build/lambda_pkg build/ofac_ingest.zip && mkdir -p build
+	.venv/bin/pip install --quiet --target build/lambda_pkg --no-deps .
+	.venv/bin/pip install --quiet --target build/lambda_pkg requests
+	cp lambdas/ofac_ingest/handler.py build/lambda_pkg/
+	cd build/lambda_pkg && zip -qr ../ofac_ingest.zip . -x "*.pyc" -x "*__pycache__*"
 
 PY := .venv/bin/python
 
