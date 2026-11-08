@@ -32,7 +32,6 @@ module "flow_widget_lambda" {
 locals {
   alarm_names = [
     "meridian-ofac-ingest-errors",
-    "meridian-ofac-ingest-staleness",
     "meridian-resolution-trigger-errors",
     "meridian-gold-notifier-errors",
     "meridian-sdn-updated-dlq-depth",

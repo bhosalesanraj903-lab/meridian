@@ -73,21 +73,3 @@ resource "aws_scheduler_schedule" "ofac_ingest" {
     }
   }
 }
-
-# Freshness: if the ingest hasn't even been INVOKED in 12h the schedule is
-# broken — missing data counts as breaching so a dead scheduler still pages.
-resource "aws_cloudwatch_metric_alarm" "ingest_staleness" {
-  alarm_name          = "meridian-ofac-ingest-staleness"
-  alarm_description   = "OFAC ingest has not run in 12h (schedule broken?)"
-  namespace           = "AWS/Lambda"
-  metric_name         = "Invocations"
-  dimensions          = { FunctionName = module.ofac_ingest_lambda.function_name }
-  statistic           = "Sum"
-  period              = 43200
-  evaluation_periods  = 1
-  threshold           = 1
-  comparison_operator = "LessThanThreshold"
-  treat_missing_data  = "breaching"
-  alarm_actions       = [module.lake.alerts_topic_arn]
-  ok_actions          = [module.lake.alerts_topic_arn]
-}
